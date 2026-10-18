@@ -316,15 +316,16 @@
         v.bar.visible = false;
         scene.add(v.bar);
       }
+      // the white flag: a stick out past the hand, with the cloth flying off the top
       const flag = new T.Group();
-      const stick = new T.Mesh(new T.BoxGeometry(0.035, 0.75, 0.035), new T.MeshStandardMaterial({ color: '#8a5a32' }));
-      stick.position.y = -0.38;
-      const cloth = new T.Mesh(new T.PlaneGeometry(0.42, 0.3), new T.MeshStandardMaterial({ color: '#ffffff', side: T.DoubleSide, emissive: '#ffffff', emissiveIntensity: 0.2 }));
-      cloth.position.set(0, -0.62, -0.22);
+      const stick = new T.Mesh(new T.BoxGeometry(0.05, 1.0, 0.05), new T.MeshStandardMaterial({ color: '#8a5a32' }));
+      stick.position.y = -0.4;
+      const cloth = new T.Mesh(new T.PlaneGeometry(0.62, 0.44), new T.MeshStandardMaterial({ color: '#ffffff', side: T.DoubleSide, emissive: '#ffffff', emissiveIntensity: 0.35 }));
+      cloth.geometry.translate(0.31, 0, 0);
+      cloth.position.set(0, -0.68, 0.02);
       cloth.rotation.y = PI / 2;
       flag.add(stick, cloth);
-      flag.position.set(0, -0.62, 0);
-      flag.rotation.x = PI;
+      flag.position.set(0, -0.6, 0);
       flag.visible = false;
       v.p.armR.add(flag);
       v.flag = flag;
@@ -445,7 +446,7 @@
         }
       }
       v.flag.visible = !!(hints && hints.flag);
-      if (v.flag.visible) v.cloth.rotation.y = PI / 2 + Math.sin(clock * 14) * 0.4;
+      if (v.flag.visible) v.cloth.rotation.y = PI / 2 + Math.sin(clock * 12) * 0.5;
     } else {
       v.ball.visible = !!(hints && hints.ball);
       if (v.ball.visible) {
@@ -522,14 +523,16 @@
       seenS.add(s.id);
       let v = shotViews.get(s.id);
       if (!v) {
-        v = spriteOf(s.emoji, s.kind === 'zap' ? 0.9 : 0.7);
+        v = spriteOf(s.emoji, s.kind === 'zap' ? 1.0 : 0.9);
         v.renderOrder = 6;
         scene.add(v);
-        if (s.kind === 'zap') {
-          const glow = new T.Sprite(new T.SpriteMaterial({ map: G.glowTexture(), color: '#5ef2ff', transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
-          glow.scale.set(1.6, 1.6, 1);
-          v.add(glow);
-        }
+        // a soft glow behind it, so it's easy to see coming
+        const col = { zap: '#5ef2ff', note: '#ff7ad8', bolt: '#ffe14d', dodgeball: '#ffd400', pie: '#ffffff' }[s.kind] || '#ffffff';
+        const glow = new T.Sprite(new T.SpriteMaterial({ map: G.glowTexture(), color: col, transparent: true, depthWrite: false, opacity: 0.85 }));
+        glow.scale.set(1.5, 1.5, 1);
+        glow.renderOrder = 5;
+        glow.position.z = -0.01;
+        v.add(glow);
         shotViews.set(s.id, v);
       }
       v.position.set(s.x, s.y, s.z);
@@ -663,7 +666,7 @@
       if (h.weapon) setText(w, 'w' + i, `${WEAPON_EMOJI[h.weapon.kind]} ×${h.weapon.uses}`);
       c.querySelector('.shield').classList.toggle('on', !!h.shield && !h.out);
       const out = c.querySelector('.out');
-      out.classList.toggle('on', !!h.out);
+      out.classList.toggle('on', !!h.out && W.mode === '2p');
       if (h.out) setText(out, 'out' + i, W.continues > 0 ? (touchMode ? 'OUT · tap 👊' : `OUT · press ${i ? 'J' : 'F'}`) : 'OUT');
     });
     // the companion's card (1 player)
@@ -1065,7 +1068,7 @@
     $('cont').classList.remove('hidden');
     const can = W.continues > 0;
     contLeft = W.difficulty === 'easy' ? Infinity : 9.99;
-    $('contN').textContent = can ? (contLeft === Infinity ? '😴' : '9') : '';
+    $('contN').textContent = can ? (contLeft === Infinity ? '💪' : '9') : '😢';
     $('contSub').textContent = !can ? 'No continues left, but you can try the stage again!' : W.continues === Infinity ? 'Have another go! (as many as you like on easy)' : `${W.continues} continue${W.continues > 1 ? 's' : ''} left`;
     $('cont').querySelector('.big').textContent = can ? 'CONTINUE?' : 'GAME OVER';
     $('contYes').textContent = can ? 'YES! ▶' : '↻ TRY AGAIN';

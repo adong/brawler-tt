@@ -1,5 +1,7 @@
 # Double TTrouble
 
+[![Double TTrouble title screen](docs/screenshot.jpg)](https://adong.github.io/brawler-tt/)
+
 A side-scrolling co-op brawler starring Teddy and Tommy, in the spirit of the old arcade street brawlers, except it's a big silly pillow fight. It's built with Claude Code from plain JavaScript and Three.js, on the shared Claude Games kit.
 There are no image, model or audio files: the brothers and the gang are the kit's blocky characters, every texture is painted on a canvas, and every sound is synthesised.
 

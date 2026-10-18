@@ -3,7 +3,7 @@
 [![Double TTrouble title screen](docs/screenshot.jpg)](https://adong.github.io/brawler-tt/)
 
 Press **?** any time (or tap the round **?** button on the left edge) to see the keys. The game waits while you look.
-Tap **中文 / EN** under it to switch between English and 中文 (the dashboard and every game remember the choice).
+Tap the language button under it (the A文 icon) to switch between English and 中文; the dashboard and every game remember the choice.
 
 A side-scrolling co-op brawler starring Teddy and Tommy, in the spirit of the old arcade street brawlers, except it's a big silly pillow fight. It's built with Claude Code from plain JavaScript and Three.js, on the shared Claude Games kit.
 There are no image, model or audio files: the brothers and the gang are the kit's blocky characters, every texture is painted on a canvas, and every sound is synthesised.

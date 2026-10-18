@@ -2,6 +2,10 @@
 
 [![Double TTrouble title screen](docs/screenshot.jpg)](https://adong.github.io/brawler-tt/)
 
+A brothers street brawl with pillows: silly and safe. 6 stages, 1 or 2 players.
+
+**中文：** 兄弟俩的枕头街头大战，搞笑又安全。6 关，单人或双人。
+
 Press **?** any time (or tap the round **?** button on the left edge) to see the keys. The game waits while you look.
 Tap the language button under it (the A文 icon) to switch between English and 中文; the dashboard and every game remember the choice.
 
@@ -12,7 +16,7 @@ There are no image, model or audio files: the brothers and the gang are the kit'
 
 It's silly, not violent. Hits make comic POW! bursts, feathers and a bonk. A knocked-out baddie sits down dizzy with stars and a chick circling his head. Then he gets up, waves a little white flag and goes POOF.
 
-The name lives in one place, `js/title.js`, so it's easy to change. "Double TTrouble" is a working title.
+The name lives in one place, `js/title.js`, so it's easy to change.
 
 ## Play
 

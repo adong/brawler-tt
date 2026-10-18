@@ -12,7 +12,7 @@
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const PI = Math.PI;
 
-  document.title = TITLE.NAME;
+  document.title = `${TITLE.NAME} · Teddy & Tommy`;
   $('logo1').textContent = TITLE.LINE1;
   $('logo2').innerHTML = TITLE.LINE2.replace('TT', '<i>TT</i>');
   $('tagline').textContent = TITLE.TAG;

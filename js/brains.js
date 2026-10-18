@@ -69,6 +69,16 @@
           speed = sp;
           // the spot is off-screen: come round the other side
           if (tx < Sim().viewL(W) + 0.2 || tx > Sim().viewR(W) - 0.2) { ai.side = -ai.side; tx = t.x + ai.side * reach; }
+          // coming round to his other side: walk around him (up or down the street), not through him
+          if (sign(e.x - t.x) !== ai.side && Math.abs(e.x - t.x) < 1.2) {
+            ai.flankT = (ai.flankT || 0) + DT;
+            if (ai.flankT > 2.5) { ai.side = sign(e.x - t.x) || ai.side; ai.flanked = false; ai.flankT = 0; }
+            else {
+              const up = t.z - W.zMin > W.zMax - t.z ? -1 : 1;
+              tx = e.x + ai.side * 0.6;
+              tz = clamp(t.z + up * 0.85, W.zMin, W.zMax);
+            }
+          } else ai.flankT = 0;
           const dx = tx - e.x, dz = tz - e.z;
           if (Math.abs(dx) < 0.28 && Math.abs(dz) < 0.22 && ai.cool <= 0) {
             e.face = sign(t.x - e.x) || e.face;
@@ -426,6 +436,11 @@
       return inp;
     }
     const opts = mem.opts || {};
+    // holding a baddie: bop bop toss (mashing, like a kid would)
+    if (h.state === 'grab') {
+      if (W.t > (mem.nextBop || 0)) { inp.attack = true; mem.nextBop = W.t + 0.2; }
+      return inp;
+    }
     // a "little kid" bot: slow to react, mashes now and then, never dodges or uses the special
     if (opts.kid) {
       opts.special = false;

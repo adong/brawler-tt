@@ -149,17 +149,18 @@
   function ring(x, z, max, speed, style, zScale = 1.6) {
     if (!ringTex) {
       const [c, g] = G.makeCanvas(256, 256);
-      const gr = g.createRadialGradient(128, 128, 80, 128, 128, 126);
+      const gr = g.createRadialGradient(128, 128, 60, 128, 128, 127);
       gr.addColorStop(0, 'rgba(255,255,255,0)');
-      gr.addColorStop(0.6, 'rgba(255,255,255,0.9)');
-      gr.addColorStop(0.85, 'rgba(255,255,255,1)');
+      gr.addColorStop(0.45, 'rgba(255,255,255,0.35)');
+      gr.addColorStop(0.75, 'rgba(255,255,255,1)');
+      gr.addColorStop(0.9, 'rgba(255,255,255,1)');
       gr.addColorStop(1, 'rgba(255,255,255,0)');
       g.fillStyle = gr;
       g.fillRect(0, 0, 256, 256);
       ringTex = G.toTexture(c);
     }
-    const col = { dunk: '#ff8a1f', peace: '#ff7ac8', stomp: '#c58a4a', hello: '#ffd400', blast: '#ffffff', zap: '#5ef2ff' }[style] || '#ffffff';
-    const m = new T.Mesh(new T.PlaneGeometry(2, 2), new T.MeshBasicMaterial({ map: ringTex, color: col, transparent: true, depthWrite: false, blending: style === 'stomp' ? T.NormalBlending : T.AdditiveBlending }));
+    const col = { dunk: '#ff7a10', peace: '#ff5ab8', stomp: '#a0602a', hello: '#ffc400', blast: '#ffe14d', zap: '#18c8ff' }[style] || '#ffffff';
+    const m = new T.Mesh(new T.PlaneGeometry(2, 2), new T.MeshBasicMaterial({ map: ringTex, color: col, transparent: true, depthWrite: false }));
     m.rotation.x = -Math.PI / 2;
     m.position.set(x, 0.06, z);
     m.renderOrder = 3;

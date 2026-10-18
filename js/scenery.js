@@ -177,8 +177,9 @@
       c.strokeStyle = '#d5dae2'; c.lineWidth = 3;
       for (let y = 0; y < 256; y += 21) for (let x = (y / 21) % 2 ? 0 : 21; x < 256; x += 42) c.strokeRect(x, y, 42, 21);
     }, 1);
-    wallTex.repeat.set((L + 60) / 4, 2);
-    plane(g, L + 60, 8, new T.MeshStandardMaterial({ map: wallTex, roughness: 0.6 }), L / 2, 3, -6.8);
+    wallTex.repeat.set((L + 60) / 4, 4);
+    plane(g, L + 60, 16, new T.MeshStandardMaterial({ map: wallTex, roughness: 0.6 }), L / 2, 7, -6.8);
+    box(g, L + 60, 1.2, 0.1, '#2f6fdc', L / 2, 6.4, -6.75);
     box(g, L + 60, 0.5, 0.06, '#2f6fdc', L / 2, 1.2, -6.75);
     box(g, L + 60, 0.15, 0.06, '#ffd400', L / 2, 1.75, -6.75);
     for (let x = 4; x < L + 6; x += 16) sign(g, 'PILLOW ST.', 4, 0.9, '#2f6fdc', '#ffffff', x, 2.8, -6.7);
@@ -197,8 +198,7 @@
       box(g, 0.7, 6, 0.7, '#e7e2d6', x, 0, -3.4);
       box(g, 0.75, 0.4, 0.75, '#2f6fdc', x, 0, -3.4);
     }
-    box(g, L + 60, 0.3, 14, '#5d6170', L / 2, 6.2, -1);
-    for (let x = -4; x < L + 10; x += 4) box(g, 2.2, 0.08, 0.3, basic('#fffbe8'), x, 6.1, -1.5);
+    for (let x = -4; x < L + 10; x += 6) box(g, 3.2, 0.25, 0.3, basic('#fffbe8'), x, 5.6, -6.6);
     for (let x = 10; x < L; x += 19) bench(g, x, 2.2, '#2f6fdc');
     // a train that zooms past now and then
     const train = new T.Group();
@@ -316,7 +316,8 @@
       box(g, 7.6, 3.5, 0.3, col, x, 4.9, -6.2);
       box(g, 6, 2.2, 0.1, mat('#bfe8ff', { roughness: 0.15, emissive: '#a8dcff', emissiveIntensity: 0.3 }), x, 5.4, -6.0);
     }
-    box(g, L + 60, 0.3, 12, '#fff8ee', L / 2, 8.5, -2);
+    plane(g, L + 60, 10, mat('#f7efe6'), L / 2, 9, -7.2);
+    for (let x = -4; x < L + 10; x += 9) box(g, 6, 1.6, 0.1, mat('#cfefff', { emissive: '#bfe8ff', emissiveIntensity: 0.5 }), x, 8.2, -7.1);
     // plants, a fountain, balloons
     for (let x = 4; x < L + 6; x += 9) {
       cyl(g, 0.4, 0.3, 0.6, '#c46a3a', x, 0, -3.6);
@@ -361,7 +362,7 @@
     const fans = ['😀', '😄', '🤩', '😆', '🥳', '😺'];
     for (let x = -6; x < L + 8; x += 1.6 + rnd() * 1.6) {
       const r = Math.floor(rnd() * 4) + 1;
-      const s = emojiSprite(g, fans[Math.floor(rnd() * fans.length)], 0.7, x, r * 0.5 + 0.35, -4.6 - r * 0.8 + 0.1);
+      const s = emojiSprite(g, fans[Math.floor(rnd() * fans.length)], 1.0, x, r * 0.5 + 0.5, -4.6 - r * 0.8 + 0.1);
       s.userData.bob = rnd() * 6;
     }
     // the wall: hoops, banners, a scoreboard, windows

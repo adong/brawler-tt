@@ -506,6 +506,7 @@
     h.grab = e;
     h.bops = 0;
     h.bopT = -1;
+    h.queued = false;
     h.vx = h.vz = 0;
     h.contact = 0;
     e.state = 'held';
@@ -526,6 +527,8 @@
     e.y = 0;
     if (h.bopT >= 0) {
       h.bopT += DT;
+      if (inp.attack) h.queued = (inp.mx || 0) * h.face < -0.3 ? 'back' : 'bop';
+      if (inp.jump) h.queued = 'back';
       if (h.bopT >= W.R.MOVES.bop.at && !h.bopHit) {
         h.bopHit = true;
         const m = W.R.MOVES.bop;
@@ -542,8 +545,10 @@
       return;
     }
     const away = (inp.mx || 0) * h.face < -0.3;
-    if (inp.jump || (inp.attack && away)) return toss(W, h, -h.face);
-    if (inp.attack) {
+    const q = h.queued;
+    h.queued = false;
+    if (inp.jump || (inp.attack && away) || q === 'back') return toss(W, h, -h.face);
+    if (inp.attack || q === 'bop') {
       if (h.bops >= 2) return toss(W, h, h.face);
       h.bops++;
       h.bopT = 0;
@@ -724,14 +729,19 @@
       }
       case 'giving':
         b.vx = b.vz = 0;
-        if (b.st > 0.35 && b.wantTreat > 0) {
-          b.wantTreat = 0;
+        if (b.st > 0.35 && !b.gave && b.wantTreat > 0) {
+          b.gave = true;
+          b.wantTreat--;
           const T = W.R.TREATS[W.treatN++ % W.R.TREATS.length];
           if (activeHero(h)) h.hp = Math.min(h.maxHp, h.hp + B.treatHeal);
           W.stats.treats++;
           ev(W, 'treat', { who: b.who, to: h.who, emoji: T.emoji, name: T.name, x: b.x, z: b.z, tx: h.x, tz: h.z });
         }
-        if (b.st > 0.7) { b.state = 'fight'; b.st = 0; }
+        if (b.st > 0.75) {
+          b.gave = false;
+          b.state = b.wantTreat > 0 ? 'bGive' : 'fight';
+          b.st = 0;
+        }
         break;
       case 'fight': case 'idle': case 'walk': case 'run': case 'attack': case 'land': case 'jump': {
         if (b.state === 'fight') b.state = 'idle';
@@ -818,7 +828,7 @@
   function hittable(W, e) {
     if (e.gone || e.ko) return false;
     if (['down', 'lying', 'getup', 'dizzy', 'flag', 'held'].includes(e.state)) return false;
-    if (e.state === 'enter' && (e.x < W.cam.x - W.halfW || e.x > W.cam.x + W.halfW)) return false;
+    if (e.state === 'enter' && (e.x < viewL(W) || e.x > viewR(W))) return false;
     return true;
   }
 
@@ -886,6 +896,7 @@
     f.face = -dir;
     f.ko = !!(ko || f.ko);
     f.move = null;
+    if (f.kind === 'enemy') f.x = clamp(f.x, viewL(W), viewR(W));
     if (f.kind === 'enemy' && ko) {
       if (f.boss && !W.bossDown) {
         W.bossDown = true;
@@ -1027,7 +1038,7 @@
   function pickups(W, h) {
     if (!['idle', 'walk', 'run', 'land'].includes(h.state) || h.y > 0.1) return;
     for (const it of W.items) {
-      if (it.gone || it.y > 0.3 || it.t < 0.25) continue;
+      if (it.gone || it.y > 0.3 || (it.popped && it.t < 0.3)) continue;
       if (Math.abs(it.x - h.x) > 0.75 || Math.abs(it.z - h.z) > 0.55) continue;
       const food = W.R.FOOD[it.kind];
       if (food) {
@@ -1278,6 +1289,7 @@
     if ((!W.enemies.length && W.phaseT > 1.2) || W.phaseT > 6) {
       W.enemies = [];
       W.shots = [];
+      W.items = [];
       setPhase(W, 'celebrate');
       const cx = W.cam.x;
       W.heroes.forEach((h) => {

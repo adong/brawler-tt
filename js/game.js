@@ -330,7 +330,7 @@
       v.flag = flag;
       v.cloth = cloth;
     } else {
-      v.ball = spriteOf('🏀', 0.55);
+      v.ball = spriteOf('🏀', 0.72);
       v.ball.visible = false;
       scene.add(v.ball);
       if (f.kind === 'buddy' || (W && W.mode === '2p')) {
@@ -409,10 +409,10 @@
     if (p.cape) p.cape.rotation.x = 0.15 + Math.abs(f.vx || 0) * 0.08 + Math.sin(clock * 6) * 0.05;
 
     // hit flash, and blinking while invulnerable
-    const flash = f.flash > 0;
+    const flash = f.flash > 0.08;
     if (flash !== v.flashing) {
       v.flashing = flash;
-      for (const m of v.mats) { m.emissive.set(flash ? '#ffffff' : '#000000'); m.emissiveIntensity = flash ? 0.7 : 1; }
+      for (const m of v.mats) { m.emissive.set(flash ? '#ffffff' : '#000000'); m.emissiveIntensity = flash ? (f.boss ? 0.3 : 0.5) : 1; }
     }
     if (f.kind === 'hero' && f.inv > 0 && !['special', 'team', 'celebrate', 'drop'].includes(f.state) && f.state !== 'getup') {
       p.root.visible = Math.floor(clock * 14) % 2 === 0;
@@ -792,7 +792,7 @@
         }
         case 'peaceWave':
           Fx.ring(e.x, e.z, e.max, R.SPECIALS.peace.speed, 'peace', R.SPECIALS.peace.zScale);
-          Fx.pow(e.x, 2.9, e.z, 'PEACE!', true);
+          Fx.pow(e.x + 0.9, 3.5, e.z, 'PEACE!', false);
           sfx('peace');
           break;
         case 'hello':
@@ -1089,6 +1089,7 @@
     screen = 'results';
     Input.setEnabled(false);
     $('touch').classList.add('hidden');
+    hud.classList.add('hidden');
     const last = W.si === STAGES.length - 1;
     const fs = $('resFaces');
     fs.innerHTML = '';
@@ -1298,6 +1299,8 @@
     },
     world: () => W,
     calm(v = true) { document.body.classList.toggle('calm', !!v); },
+    // hide banners and toasts (for clean screenshots)
+    quiet() { bannerUntil = 1e-6; for (const t of toasts) t.until = 0; if (W) updateHud(0); },
     camera: () => ({ x: camera.position.x, y: camera.position.y, z: camera.position.z }),
     renderer,
   });

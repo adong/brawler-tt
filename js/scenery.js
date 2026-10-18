@@ -57,7 +57,11 @@
       g.fillRect(0, 0, w, h);
     });
   }
+  // Signs are part of the story, so they speak the player's language (Kit.lang; they're redrawn on a switch).
+  const tr = (s) => (window.Kit.lang ? window.Kit.lang.t(s) : s);
+  const zhFont = (px) => (window.Kit.lang && window.Kit.lang.is('zh') ? `900 ${px}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif` : null);
   function sign(parent, text, w, h, bg, fg, x, y, z, font) {
+    text = tr(text);
     const tex = canvasTex(512, Math.round((512 * h) / w), (g, cw, ch) => {
       g.fillStyle = bg;
       G().roundRect(g, 4, 4, cw - 8, ch - 8, Math.min(28, ch / 4));
@@ -66,7 +70,7 @@
       g.strokeStyle = '#14121f';
       g.stroke();
       g.fillStyle = fg;
-      g.font = `${Math.round(ch * 0.55)}px ${font || G().FONT}`;
+      g.font = zhFont(Math.round(ch * 0.55)) || `${Math.round(ch * 0.55)}px ${font || G().FONT}`;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
       g.fillText(text, cw / 2, ch / 2 + ch * 0.04, cw - 30);
@@ -189,7 +193,7 @@
         c.fillStyle = ['#ff8ab0', '#ffd45a', '#8cd8ff', '#a6f08a'][Math.floor(rnd() * 4)];
         c.fillRect(0, 0, 128, 170);
         c.font = `80px ${G().EMOJI_FONT}`; c.textAlign = 'center'; c.fillText(posters[Math.floor(rnd() * posters.length)], 64, 100);
-        c.fillStyle = '#14121f'; c.font = `18px ${G().FONT}`; c.fillText('PILLOW FUN!', 64, 150);
+        c.fillStyle = '#14121f'; c.font = zhFont(20) || `18px ${G().FONT}`; c.fillText(tr('PILLOW FUN!'), 64, 150);
       });
       plane(g, 1.5, 2, new T.MeshStandardMaterial({ map: t }), x, 3.0, -6.7);
     }

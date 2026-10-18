@@ -1310,6 +1310,10 @@
   window.game = api;
   window.BrawlGame = { gesture };
 
+  // English / 中文: page text translates itself (js/zh.js); the street signs and comic bursts are drawn on canvases,
+  // so they're redrawn when the language changes.
+  if (Kit.lang) Kit.lang.onChange(() => { Fx.repaint(); if (W) buildStage(); });
+
   // ---------------------------------------------------------------- go
 
   resize();

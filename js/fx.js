@@ -20,8 +20,15 @@
     'BEEP!': ['#5ef2ff', '#ffffff', '#1f4fe0'], 'BOINK!': ['#9be37a', '#e8ffd8', '#3a2a5a'],
   };
 
+  // Chinese words need a font that has them (Bungee doesn't).
+  const CJK = '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
+  const lang = () => window.Kit.lang;
+  const isZh = () => !!(lang() && lang().is('zh'));
+
+  // A burst is drawn on a canvas, so the page translator never sees it: ask Kit.lang for the word here.
   function burstTexture(word) {
-    if (burstCache[word]) return burstCache[word];
+    const shown = lang() ? lang().t(word) : word;
+    if (burstCache[shown]) return burstCache[shown];
     const [c, g] = G.makeCanvas(256, 256);
     const [outer, inner, text] = STYLE[word] || STYLE['POW!'];
     const star = (r1, r2, n, fill) => {
@@ -41,16 +48,16 @@
     star(84, 52, 10, inner);
     g.translate(128, 132);
     g.rotate(-0.12);
-    const size = word.length > 8 ? 36 : word.length > 5 ? 46 : 60;
-    g.font = `${size}px ${G.FONT}`;
+    const size = isZh() ? (shown.length > 3 ? 46 : 58) : word.length > 8 ? 36 : word.length > 5 ? 46 : 60;
+    g.font = isZh() ? `900 ${size}px ${CJK}` : `${size}px ${G.FONT}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.lineWidth = 10;
     g.strokeStyle = '#14121f';
-    g.strokeText(word, 0, 0, 230);
+    g.strokeText(shown, 0, 0, 230);
     g.fillStyle = text;
-    g.fillText(word, 0, 0, 230);
-    return (burstCache[word] = G.toTexture(c));
+    g.fillText(shown, 0, 0, 230);
+    return (burstCache[shown] = G.toTexture(c));
   }
 
   function sprite(tex, size, x, y, z, o = {}) {
@@ -281,5 +288,8 @@
     Object.keys(STYLE).forEach(burstTexture); // paint them now, not mid-fight
   }
 
-  window.BrawlFx = { init, pow, stars, feathers, dust, poof, ring, arc, floatUp, confetti, update, clear, sprite, burstTexture, count: () => live.length };
+  // paint the bursts in the new language now, not mid-fight
+  const repaint = () => Object.keys(STYLE).forEach(burstTexture);
+
+  window.BrawlFx = { repaint, init, pow, stars, feathers, dust, poof, ring, arc, floatUp, confetti, update, clear, sprite, burstTexture, count: () => live.length };
 })();

@@ -405,14 +405,14 @@
     <button class="pick teddy" data-hero="teddy"><img alt=""><span class="nm">TEDDY</span><span class="sp">🥊 pillow jab · straight · hook<br>🏀 SLAM DUNK special</span></button>
     <button class="pick tommy" data-hero="tommy"><img alt=""><span class="nm">TOMMY</span><span class="sp">🛏️ pillow bop · bop · FLOMP<br>✌️ PEACE WAVE special</span></button>
   </div>
-  <p class="hint">Tap a brother · <kbd>←</kbd><kbd>→</kbd> and <kbd>Enter</kbd> · <kbd>Esc</kbd> back · the other brother can be called in any time!</p>
+  <p class="hint" data-zh="点一个兄弟 · <kbd>←</kbd><kbd>→</kbd> 和 <kbd>回车</kbd> · <kbd>Esc</kbd> 返回 · 另一个兄弟随时都能叫来帮忙！">Tap a brother · <kbd>←</kbd><kbd>→</kbd> and <kbd>Enter</kbd> · <kbd>Esc</kbd> back · the other brother can be called in any time!</p>
   <button id="pickBack" class="btn small ghost">◀ BACK</button>
 </div>
 
 <div id="stagesScr" class="screen hidden">
   <div class="ttl">PICK A STAGE</div>
   <div class="stages" id="stageGrid"></div>
-  <p class="hint">Clear a stage to open the next one · <kbd>Esc</kbd> back</p>
+  <p class="hint" data-zh="打赢一关，下一关就开啦 · <kbd>Esc</kbd> 返回">Clear a stage to open the next one · <kbd>Esc</kbd> back</p>
   <button id="stagesBack" class="btn small ghost">◀ BACK</button>
 </div>
 
@@ -1341,6 +1341,238 @@
 
 </script>
 <script>
+/* Kit.lang: every game in English or 中文.
+
+   - The choice is remembered under one localStorage key ('claudeGames.lang'), shared by every game and the dashboard on
+     the same site, so switching on the dashboard switches the games too. A first visit is in English.
+   - A small 中文 / EN button sits under the ? button (and the ? panel has one too). Switching is live: no reload.
+   - Page text translates by itself. A dictionary (English -> 中文) is checked against every text node and every
+     placeholder, title and aria-label, now and whenever the game changes the page later (a MutationObserver), so a
+     game that sets `el.textContent = 'TOMMY SAVED YOU!'` needs no code change, just a dictionary entry.
+   - Text with numbers or names in it ("TEDDY'S BEST", "3 HITS!") uses rules: a regex and a replacement.
+   - Text the game draws on a canvas (3D word bursts, signs) never reaches the page, so wrap it: Kit.lang.t('POW!').
+   - An element whose HTML needs a different word order in Chinese can carry the whole translation: data-zh="...".
+     The element's English HTML is kept, and swapped back when switching to English.
+   - data-no-lang on an element keeps its text (and its children's) as it is.
+
+   In a game, load kit/lang.js right after kit/sound.js (before kit/help.js), and put the game's words in js/zh.js:
+
+     Kit.lang.add({ 'PLAY': '开始', 'TOMMY SAVED YOU!': 'TOMMY 救了你！' });
+     Kit.lang.rule(/^(\w+)'S BEST$/, '$1 的最高分');
+     Kit.lang.keep(['TEDDY', 'TOMMY']);            // names that stay as they are
+     Kit.lang.onChange((lang) => rebuildSigns());  // only for canvas text made once and kept
+
+   Kit.lang.untranslated() lists the English still showing on the page (and canvas text asked for through t() with no
+   entry): switch to 中文, visit every screen, and run it until it comes back empty. */
+(function () {
+  const Kit = (window.Kit = window.Kit || {});
+  const KEY = 'claudeGames.lang';
+
+  let lang = '';
+  try { lang = localStorage.getItem(KEY) || ''; } catch (e) { /* storage blocked */ }
+  if (lang !== 'en' && lang !== 'zh') lang = 'en'; // English until someone picks 中文 (Alan's choice)
+
+  const dict = new Map();
+  const rules = [];
+  const kept = new Set();
+  const askedMissing = new Set();
+  const listeners = [];
+
+  // Words every game shares: the ? panel, menus, buttons. A game's own js/zh.js can override any of them.
+  const COMMON = {
+    '? KEYS': '? 按键', 'these keys': '看按键', 'or tap the round': '或点圆形', 'button': '按钮',
+    'or': '或', 'then': '然后', 'hold': '按住', 'tap': '点', 'click': '点击', 'swipe': '滑动', 'drag': '拖动',
+    'double-tap': '连按两下', 'and': '和', 'longer': '更久', 'Space': '空格', 'Enter': '回车',
+    'Player 1': '玩家 1', 'Player 2': '玩家 2', 'Teddy': 'Teddy', 'Tommy': 'Tommy',
+    'move': '移动', 'walk': '走', 'run': '跑', 'jump': '跳', 'pause': '暂停', 'sound on / off': '声音 开 / 关',
+    'pause · sound': '暂停 · 声音', 'call your brother': '叫兄弟来帮忙', 'call your brother · high five': '叫兄弟 · 击掌',
+    'easy mode (title)': '简单模式（标题页）', 'In 1 player both sets of keys work.': '单人时两套按键都能用。',
+    'PLAY': '开始', '▶ PLAY': '▶ 开始', 'PAUSED': '暂停中', 'RESUME': '继续', '▶ RESUME': '▶ 继续', 'MENU': '菜单',
+    'EASY': '简单', 'NORMAL': '普通', '1 PLAYER': '单人', '2 PLAYERS': '双人', 'BEST': '最高分', 'SCORE': '得分',
+    'GAME OVER': '游戏结束', 'PLAY AGAIN': '再玩一次', 'NEXT': '下一关', 'BACK': '返回', 'HOME': '主页', 'GO!': '开始！',
+    'READY?': '准备好了吗？', 'YOU WIN!': '你赢了！', 'TAP ME!': '点我！', 'built with': '制作工具：',
+    'Keys (?)': '按键 (?)', 'Show the keys': '看按键',
+  };
+  for (const k in COMMON) dict.set(k, COMMON[k]);
+
+  // ---------- translating one string ----------
+  const looksEnglish = (s) => /[A-Za-z]{2,}/.test(s);
+  function lookup(key) {
+    if (dict.has(key)) return dict.get(key);
+    for (const [re, rep] of rules) if (re.test(key)) return key.replace(re, rep);
+    return null;
+  }
+  // t('POW!') -> '砰！' in 中文 (from the dictionary), t('Score', '得分') -> an inline pair. Spaces around the words stay.
+  function t(en, zh) {
+    if (zh !== undefined) return lang === 'zh' ? zh : en;
+    if (lang !== 'zh' || en == null) return en;
+    const s = String(en), key = s.trim();
+    if (!key || kept.has(key)) return s;
+    const out = lookup(key);
+    if (out == null) { if (looksEnglish(key)) askedMissing.add(key); return s; }
+    return s.replace(key, out);
+  }
+
+  // ---------- the page ----------
+  const SKIP = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'NOSCRIPT', 'CODE', 'PRE']);
+  const ATTRS = ['placeholder', 'title', 'aria-label'];
+  const enText = new WeakMap(); // text node -> its English
+  const ourText = new WeakMap(); // text node -> what we last wrote into it
+
+  function skipped(el) {
+    return !el || SKIP.has(el.nodeName) || (el.closest && el.closest('[data-no-lang],[data-zh],#kit-help'));
+  }
+  function doText(n) {
+    if (skipped(n.parentNode)) return;
+    const cur = n.nodeValue;
+    let en = enText.get(n);
+    if (en === undefined || cur !== ourText.get(n)) { en = cur; enText.set(n, en); } // new, or the game rewrote it
+    const out = lang === 'zh' ? t(en) : en;
+    ourText.set(n, out);
+    if (out !== cur) n.nodeValue = out;
+  }
+  function doElement(el) {
+    if (el.hasAttribute('data-zh')) {
+      if (!el.hasAttribute('data-en')) el.setAttribute('data-en', el.innerHTML);
+      const html = lang === 'zh' ? el.getAttribute('data-zh') : el.getAttribute('data-en');
+      if (el.innerHTML !== html) el.innerHTML = html;
+    }
+    if (skipped(el)) return;
+    for (const a of ATTRS) {
+      if (!el.hasAttribute(a)) continue;
+      const store = 'data-en-' + a;
+      if (!el.hasAttribute(store) || el.getAttribute(a) !== el.getAttribute('data-out-' + a)) el.setAttribute(store, el.getAttribute(a));
+      const out = lang === 'zh' ? t(el.getAttribute(store)) : el.getAttribute(store);
+      el.setAttribute('data-out-' + a, out);
+      if (el.getAttribute(a) !== out) el.setAttribute(a, out);
+    }
+  }
+  function walk(root) {
+    if (!root) return;
+    if (root.nodeType === 3) return doText(root);
+    if (root.nodeType !== 1 && root.nodeType !== 9 && root.nodeType !== 11) return;
+    if (root.nodeType === 1) doElement(root);
+    if (root.nodeType === 1 && SKIP.has(root.nodeName)) return;
+    const it = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = it.nextNode())) (n.nodeType === 3 ? doText(n) : doElement(n));
+  }
+  // Our own writes come back here too (observers report later), and stop at once: the text matches what we wrote.
+  const observer = new MutationObserver((list) => {
+    for (const m of list) {
+      if (m.type === 'characterData') doText(m.target);
+      else if (m.type === 'attributes') doElement(m.target);
+      else for (const n of m.addedNodes) walk(n);
+    }
+  });
+
+  function applyAll() {
+    document.documentElement.lang = lang === 'zh' ? 'zh-Hans' : 'en';
+    document.documentElement.classList.toggle('lang-zh', lang === 'zh');
+    if (document.body) walk(document.body);
+    if (btn) btn.textContent = lang === 'zh' ? 'EN' : '中文';
+  }
+
+  // ---------- switching ----------
+  function set(l) {
+    if (l !== 'en' && l !== 'zh') return lang;
+    lang = l;
+    try { localStorage.setItem(KEY, l); } catch (e) { /* storage blocked */ }
+    applyAll();
+    for (const cb of listeners) { try { cb(lang); } catch (e) { console.error(e); } }
+    return lang;
+  }
+  const toggle = () => set(lang === 'zh' ? 'en' : 'zh');
+
+  // ---------- the 中文 / EN button, under the ? button ----------
+  let btn = null, btnOpts = {};
+  const CSS = `
+#kit-lang-btn { position: fixed; z-index: 2147482000; min-width: 40px; height: 28px; padding: 0 6px; border-radius: 14px;
+  border: 3px solid #fff; background: rgba(20, 18, 31, 0.62); color: #fff; cursor: pointer;
+  font: 800 12px/22px 'Rubik', system-ui, -apple-system, sans-serif; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+#kit-lang-btn:hover { background: #ffd400; color: #14121f; border-color: #14121f; }`;
+  function placeButton() {
+    if (btnOpts.button === false) { if (btn) btn.style.display = 'none'; return; }
+    if (!btn) {
+      const style = document.createElement('style');
+      style.textContent = CSS;
+      document.head.appendChild(style);
+      btn = document.createElement('button');
+      btn.id = 'kit-lang-btn';
+      btn.type = 'button';
+      btn.setAttribute('data-no-lang', '');
+      btn.setAttribute('aria-label', 'English / 中文');
+      document.body.appendChild(btn);
+    }
+    const pos = Object.assign({ top: 'calc(50% + 28px)', left: 'max(10px, env(safe-area-inset-left))' }, btnOpts.button || {});
+    for (const side of ['top', 'right', 'bottom', 'left']) btn.style[side] = pos[side] == null ? '' : pos[side];
+    btn.style.display = '';
+    btn.textContent = lang === 'zh' ? 'EN' : '中文';
+  }
+  // Taps on the button never reach the game (like the ? button): one click switches the language.
+  for (const type of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'click', 'dblclick']) {
+    window.addEventListener(type, (e) => {
+      if (!btn || !btn.contains(e.target)) return;
+      e.stopImmediatePropagation();
+      if (e.type === 'click') toggle();
+    }, { capture: true, passive: false });
+  }
+
+  // ---------- start ----------
+  function start() {
+    applyAll();
+    placeButton();
+    observer.observe(document.body, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ATTRS });
+  }
+  if (document.body) start();
+  else document.addEventListener('DOMContentLoaded', start, { once: true });
+
+  // ---------- for the game, and for checking ----------
+  // Judged by each text's English original against the dictionary as it is now, so strings asked for before the
+  // game's js/zh.js loaded, and translations that keep a name ("Claude 自动驾驶"), don't show up.
+  const needs = (s) => !!s && !kept.has(s) && looksEnglish(s) && lookup(s) == null;
+  function untranslated() {
+    const found = new Set([...askedMissing].filter(needs));
+    if (document.body) {
+      const it = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+      let n;
+      while ((n = it.nextNode())) {
+        if (n.nodeType === 1) {
+          if (skipped(n)) continue;
+          for (const a of ATTRS) {
+            const en = (n.getAttribute('data-en-' + a) || n.getAttribute(a) || '').trim();
+            if (n.hasAttribute(a) && needs(en)) found.add(en);
+          }
+          continue;
+        }
+        const en = (enText.get(n) ?? n.nodeValue).trim();
+        if (skipped(n.parentNode) || !needs(en)) continue;
+        found.add(en);
+      }
+    }
+    return [...found];
+  }
+
+  Kit.lang = {
+    get: () => lang,
+    is: (l) => lang === l,
+    set,
+    toggle,
+    t,
+    add(d) { for (const k in d) dict.set(k.trim(), d[k]); if (document.body) applyAll(); },
+    rule(re, rep) { rules.push([re, rep]); if (document.body) applyAll(); },
+    keep(list) { for (const s of list) kept.add(String(s).trim()); },
+    onChange(cb) { listeners.push(cb); },
+    setup(o) { btnOpts = o || {}; if (document.body) placeButton(); },
+    apply: applyAll,
+    untranslated,
+    button: () => btn,
+  };
+})();
+
+</script>
+<script>
 /* Kit.help: press ? (Shift + /) in any game, or tap the round ? button, to see that game's keys.
 
    The game freezes while the panel is open, without the game having to know:
@@ -1452,7 +1684,9 @@
     if (!isOpen && !onBtn) return;
     e.stopImmediatePropagation(); // no preventDefault on touches: a phone would then never send the click
     if (e.type === 'contextmenu') e.preventDefault();
-    if (e.type === 'click') (isOpen ? close() : open()); // pointerdown and pointerup are swallowed, so one tap is one click
+    if (e.type !== 'click') return; // pointerdown and pointerup are swallowed, so one tap is one click
+    if (isOpen && Kit.lang && e.target.closest && e.target.closest('#kit-help .kh-lang')) Kit.lang.toggle(); // stays open
+    else (isOpen ? close() : open());
   }
   for (const t of POINTER) window.addEventListener(t, onPointer, { capture: true, passive: false });
 
@@ -1466,7 +1700,11 @@
   border-radius: 22px; background: rgba(20, 18, 31, 0.94); border: 3px solid #fff; box-shadow: 0 8px 0 #000, 0 18px 40px rgba(0, 0, 0, 0.45);
   animation: kh-pop 0.22s cubic-bezier(.2, 1.5, .4, 1); }
 @keyframes kh-pop { from { transform: scale(0.85); } } /* no fade: the card shows even where animations don't run */
+#kit-help .kh-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 #kit-help .kh-tag { font-size: 12px; font-weight: 800; letter-spacing: 2px; color: #18d4ff; }
+#kit-help .kh-lang { padding: 4px 12px; border-radius: 999px; border: 2px solid #fff; background: transparent; color: #fff;
+  font: 800 13px 'Rubik', system-ui, sans-serif; cursor: pointer; }
+#kit-help .kh-lang:hover { background: #ffd400; color: #14121f; border-color: #14121f; }
 #kit-help h2 { margin: 2px 0 12px; font-family: 'Rubik', system-ui, sans-serif; font-weight: 800; /* not Bungee: it's all caps and would lose the TT in FlaTTy */
   font-size: clamp(24px, 5vw, 32px); line-height: 1.05; color: #ffd400; text-shadow: 0 3px 0 #000; }
 #kit-help table { width: 100%; border-collapse: collapse; }
@@ -1502,28 +1740,36 @@
 
   const PLAIN = new Set(['+', '·', ',', '–']);
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // English or 中文 through Kit.lang (kit/lang.js) when the game loads it: t(text) uses the game's dictionary,
+  // t(en, zh) is an inline pair for the panel's own words.
+  const t = (en, zh) => (Kit.lang ? Kit.lang.t(en, zh) : en);
+  const plain = (w) => /^[a-z][a-z-]+$/.test(w) || PLAIN.has(w);
   function keycaps(str) {
     if (!str) return '';
-    return String(str).split(/\s+/).filter(Boolean)
-      .map((w) => (/^[a-z][a-z-]+$/.test(w) || PLAIN.has(w) ? ` ${esc(w)} ` : `<kbd>${esc(w)}</kbd>`))
-      .join('');
+    const words = String(str).split(/\s+/).filter(Boolean);
+    if (words.every(plain)) return ` ${esc(t(String(str)))} `; // all words ("hold the mouse button and drag"): translate as one
+    return words.map((w) => (plain(w) ? ` ${esc(t(w))} ` : `<kbd>${esc(t(w))}</kbd>`)).join('');
   }
   function render() {
     const o = opts;
     const cols = o.cols || [];
-    let html = `<div class="kh-card"><div class="kh-tag">? KEYS</div><h2>${esc(o.title || '')}</h2><table>`;
-    if (cols.length) html += `<tr><th></th>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr>`;
+    const zh = Kit.lang && Kit.lang.is('zh');
+    let html = `<div class="kh-card"><div class="kh-top"><div class="kh-tag">${t('? KEYS', '? 按键')}</div>`;
+    if (Kit.lang) html += `<button type="button" class="kh-lang">🌐 ${zh ? 'English' : '中文'}</button>`;
+    html += `</div><h2>${esc(t(o.title || ''))}</h2><table>`;
+    if (cols.length) html += `<tr><th></th>${cols.map((c) => `<th>${esc(t(c))}</th>`).join('')}</tr>`;
     for (const row of o.keys || []) {
       const [label, ...ks] = row;
-      html += `<tr><td>${esc(label)}</td>${ks.map((k) => `<td class="kh-k">${keycaps(k)}</td>`).join('')}</tr>`;
+      html += `<tr><td>${esc(t(label))}</td>${ks.map((k) => `<td class="kh-k">${keycaps(k)}</td>`).join('')}</tr>`;
     }
-    html += `<tr><td>these keys</td><td class="kh-k" colspan="${Math.max(1, cols.length)}">${keycaps('?')} or tap the round ${keycaps('?')} button</td></tr>`;
+    html += `<tr><td>${t('these keys', '看按键')}</td><td class="kh-k" colspan="${Math.max(1, cols.length)}">${keycaps('?')} ${t('or tap the round', '或点圆形')} ${keycaps('?')} ${t('button', '按钮')}</td></tr>`;
     html += '</table>';
-    if (o.note) html += `<div class="kh-note">${esc(o.note)}</div>`;
-    if (o.touch) html += `<div class="kh-touch">👆 ${esc(o.touch)}</div>`;
-    html += '<div class="kh-foot">⏸ The game waits for you. Press any key or tap to play on.</div></div>';
+    if (o.note) html += `<div class="kh-note">${esc(t(o.note))}</div>`;
+    if (o.touch) html += `<div class="kh-touch">👆 ${esc(t(o.touch))}</div>`;
+    html += `<div class="kh-foot">⏸ ${t('The game waits for you. Press any key or tap to play on.', '游戏在等你。按任意键或点一下，继续玩。')}</div></div>`;
     root.innerHTML = html;
   }
+  if (Kit.lang) Kit.lang.onChange(() => { if (isOpen) render(); });
 
   function placeButton() {
     if (opts.button === false) { if (btn) btn.style.display = 'none'; return; }
@@ -4563,7 +4809,11 @@ window.BRAWL_STAGES = [
       g.fillRect(0, 0, w, h);
     });
   }
+  // Signs are part of the story, so they speak the player's language (Kit.lang; they're redrawn on a switch).
+  const tr = (s) => (window.Kit.lang ? window.Kit.lang.t(s) : s);
+  const zhFont = (px) => (window.Kit.lang && window.Kit.lang.is('zh') ? `900 ${px}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif` : null);
   function sign(parent, text, w, h, bg, fg, x, y, z, font) {
+    text = tr(text);
     const tex = canvasTex(512, Math.round((512 * h) / w), (g, cw, ch) => {
       g.fillStyle = bg;
       G().roundRect(g, 4, 4, cw - 8, ch - 8, Math.min(28, ch / 4));
@@ -4572,7 +4822,7 @@ window.BRAWL_STAGES = [
       g.strokeStyle = '#14121f';
       g.stroke();
       g.fillStyle = fg;
-      g.font = `${Math.round(ch * 0.55)}px ${font || G().FONT}`;
+      g.font = zhFont(Math.round(ch * 0.55)) || `${Math.round(ch * 0.55)}px ${font || G().FONT}`;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
       g.fillText(text, cw / 2, ch / 2 + ch * 0.04, cw - 30);
@@ -4695,7 +4945,7 @@ window.BRAWL_STAGES = [
         c.fillStyle = ['#ff8ab0', '#ffd45a', '#8cd8ff', '#a6f08a'][Math.floor(rnd() * 4)];
         c.fillRect(0, 0, 128, 170);
         c.font = `80px ${G().EMOJI_FONT}`; c.textAlign = 'center'; c.fillText(posters[Math.floor(rnd() * posters.length)], 64, 100);
-        c.fillStyle = '#14121f'; c.font = `18px ${G().FONT}`; c.fillText('PILLOW FUN!', 64, 150);
+        c.fillStyle = '#14121f'; c.font = zhFont(20) || `18px ${G().FONT}`; c.fillText(tr('PILLOW FUN!'), 64, 150);
       });
       plane(g, 1.5, 2, new T.MeshStandardMaterial({ map: t }), x, 3.0, -6.7);
     }
@@ -5035,8 +5285,15 @@ window.BRAWL_STAGES = [
     'BEEP!': ['#5ef2ff', '#ffffff', '#1f4fe0'], 'BOINK!': ['#9be37a', '#e8ffd8', '#3a2a5a'],
   };
 
+  // Chinese words need a font that has them (Bungee doesn't).
+  const CJK = '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
+  const lang = () => window.Kit.lang;
+  const isZh = () => !!(lang() && lang().is('zh'));
+
+  // A burst is drawn on a canvas, so the page translator never sees it: ask Kit.lang for the word here.
   function burstTexture(word) {
-    if (burstCache[word]) return burstCache[word];
+    const shown = lang() ? lang().t(word) : word;
+    if (burstCache[shown]) return burstCache[shown];
     const [c, g] = G.makeCanvas(256, 256);
     const [outer, inner, text] = STYLE[word] || STYLE['POW!'];
     const star = (r1, r2, n, fill) => {
@@ -5056,16 +5313,16 @@ window.BRAWL_STAGES = [
     star(84, 52, 10, inner);
     g.translate(128, 132);
     g.rotate(-0.12);
-    const size = word.length > 8 ? 36 : word.length > 5 ? 46 : 60;
-    g.font = `${size}px ${G.FONT}`;
+    const size = isZh() ? (shown.length > 3 ? 46 : 58) : word.length > 8 ? 36 : word.length > 5 ? 46 : 60;
+    g.font = isZh() ? `900 ${size}px ${CJK}` : `${size}px ${G.FONT}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.lineWidth = 10;
     g.strokeStyle = '#14121f';
-    g.strokeText(word, 0, 0, 230);
+    g.strokeText(shown, 0, 0, 230);
     g.fillStyle = text;
-    g.fillText(word, 0, 0, 230);
-    return (burstCache[word] = G.toTexture(c));
+    g.fillText(shown, 0, 0, 230);
+    return (burstCache[shown] = G.toTexture(c));
   }
 
   function sprite(tex, size, x, y, z, o = {}) {
@@ -5296,7 +5553,10 @@ window.BRAWL_STAGES = [
     Object.keys(STYLE).forEach(burstTexture); // paint them now, not mid-fight
   }
 
-  window.BrawlFx = { init, pow, stars, feathers, dust, poof, ring, arc, floatUp, confetti, update, clear, sprite, burstTexture, count: () => live.length };
+  // paint the bursts in the new language now, not mid-fight
+  const repaint = () => Object.keys(STYLE).forEach(burstTexture);
+
+  window.BrawlFx = { repaint, init, pow, stars, feathers, dust, poof, ring, arc, floatUp, confetti, update, clear, sprite, burstTexture, count: () => live.length };
 })();
 
 </script>
@@ -6744,6 +7004,10 @@ window.BRAWL_STAGES = [
   window.game = api;
   window.BrawlGame = { gesture };
 
+  // English / 中文: page text translates itself (js/zh.js); the street signs and comic bursts are drawn on canvases,
+  // so they're redrawn when the language changes.
+  if (Kit.lang) Kit.lang.onChange(() => { Fx.repaint(); if (W) buildStage(); });
+
   // ---------------------------------------------------------------- go
 
   resize();
@@ -6772,6 +7036,144 @@ Kit.help.setup({
   note: "In 1 player both sets of keys work, and Space jumps.",
   touch: "Joystick, 👊 BONK, ⬆️ JUMP and ⭐. Tap your brother's face to call him.",
 });
+
+</script>
+<script>
+/* 中文 for Double TTrouble: every word on the page, the toasts and banners, the stage and boss names, the ? panel
+   (Kit.lang, from kit/lang.js). The comic bursts (POW!) and the street signs are drawn on canvases, so js/fx.js and
+   js/scenery.js ask Kit.lang.t() for them; their words are here too.
+   Staying in English on purpose: the kids' names (TEDDY, TOMMY), the game's name and logo (Alan's pick), and the
+   1P / 2P labels. */
+(function () {
+  const L = Kit.lang;
+  L.keep([
+    'DOUBLE', 'TT', 'ROUBLE', 'TTROUBLE', 'Double TTrouble', 'Claude Code', 'Esc',
+    'TEDDY', 'TOMMY', 'Teddy', 'Tommy', 'TEDDY!', 'TOMMY!', 'TEDDY · 1P', 'TOMMY · 2P', 'Teddy (1P)', 'Tommy (2P)',
+  ]);
+
+  // the six streets and their stories
+  const STAGE = {
+    'SUNNY PARK': '阳光公园', 'SUBWAY PLATFORM': '地铁站台', 'ROOFTOP': '天台', 'THE MALL': '大商场',
+    'SCHOOL GYM': '学校体育馆', 'ZOMBIE CASTLE': '僵尸城堡',
+  };
+  // the bosses, and the line under their name
+  const BOSS = {
+    'BIG GRUMBLE': '大咕噜', 'DJ ZOMBIE': 'DJ 僵尸', 'ROCKET BOLT': '火箭机器人', 'MEGA BOLT': '超级大机器人',
+    'ZOMBIE COACH': '僵尸教练', 'KING ZOMBIE': '僵尸国王',
+  };
+  const WEAPON = { 'BIG PILLOW': '大枕头', 'RUBBER CHICKEN': '橡皮鸡', 'FOAM BAT': '泡泡球棒' };
+  const TREAT = { 'ICE CREAM': '冰淇淋', WATER: '水', 'JUICE BOX': '果汁', COOKIE: '饼干', WATERMELON: '西瓜', BANANA: '香蕉' };
+  L.add(STAGE);
+  L.add(BOSS);
+  L.add(WEAPON);
+
+  L.add({
+    // stories (the line under STAGE 1)
+    'The Grumble Gang snatched every pillow in town! Get them back!': '咕噜帮抢走了全城的枕头！快去抢回来！',
+    'The gang ran down into the subway. Mind the gap!': '坏蛋们跑进地铁站啦。小心站台缝隙！',
+    'Up on the roofs at sunset. Something is buzzing up there...': '夕阳下的天台上……好像有什么在嗡嗡响！',
+    'They are hiding in the toy shop. Shhh... PILLOW FIGHT!': '他们躲在玩具店里。嘘……枕头大战开始！',
+    "Teddy's favourite place: the basketball court. Time for dodgeball!": 'Teddy 最爱的篮球场。来玩躲避球啦！',
+    "The King Zombie's silly castle, full of pillows. The last pillow fight!": '僵尸国王的搞笑城堡，堆满了枕头。最后一场枕头大战！',
+    // boss lines
+    'King of the Gremlins!': '小怪兽的大王！', 'Drops the beat (and notes)!': '会扔音符的打碟高手！',
+    'Zooms around the rooftops!': '在天台上飞来飞去！', 'The biggest robot in the mall!': '商场里最大的机器人！',
+    'Blows the whistle!': '最爱吹哨子！', 'Ruler of the silly castle!': '搞笑城堡的国王！',
+
+    // title screen
+    "Teddy & Tommy's big pillow fight": 'Teddy 和 Tommy 的枕头大战',
+    '▶ 1 PLAYER': '▶ 单人', '👫 2 PLAYERS': '👫 双人',
+    'Teddy or Tommy (+ call your brother)': 'Teddy 或 Tommy（还能叫兄弟来帮忙）',
+    'brothers together, one keyboard': '兄弟一起玩，一个键盘',
+    'lots of health, slow baddies': '血多多，坏蛋慢慢',
+    'for big kids': '给大孩子玩',
+    '🗺️ STAGES': '🗺️ 选关', 'Difficulty': '难度',
+    'walk (up/down the street too)': '走路（还能往里往外走）',
+    'pillow bonk · jump · special': '枕头打 · 跳 · 大招',
+    'dash': '冲刺',
+    'call your brother / team-up': '叫兄弟来帮忙 / 兄弟合体',
+    "Joystick to walk (flick it twice to dash). 👊 bonk, ⬆️ jump, ⭐ special. Tap your brother's face to call him! On an iPad, two players can play side by side.":
+      '摇杆走路（快速拨两下就冲刺）。👊 打，⬆️ 跳，⭐ 大招。点兄弟的头像叫他来帮忙！在 iPad 上，两个人可以并排一起玩。',
+    'LOADING…': '加载中…',
+    '↻ Turn sideways for a bigger pillow fight!': '↻ 横过来玩，枕头大战看得更清楚！',
+
+    // who's playing?
+    "WHO'S PLAYING?": '谁来玩？',
+    '🥊 pillow jab · straight · hook': '🥊 枕头刺拳 · 直拳 · 勾拳',
+    '🏀 SLAM DUNK special': '🏀 大招：扣篮',
+    '🛏️ pillow bop · bop · FLOMP': '🛏️ 枕头 啵 · 啵 · 扑！',
+    '✌️ PEACE WAVE special': '✌️ 大招：比耶冲击波',
+    '◀ BACK': '◀ 返回',
+
+    // stage select
+    'PICK A STAGE': '选一关',
+
+    // the HUD
+    'YOU': '你', '🛡️ SAFE': '🛡️ 安全', 'CALL': '呼叫', 'TAP FOR A TREAT': '再点要零食', 'TEAM-UP!': '兄弟合体！',
+    'BOSS': '大怪', 'GO ➜': '前进 ➜', 'SPECIAL': '大招', 'JUMP': '跳', 'BONK': '打',
+    'OUT': '出局', 'OUT · tap 👊': '出局 · 点 👊 回来', 'OUT · press F': '出局 · 按 F 回来', 'OUT · press J': '出局 · 按 J 回来',
+    'Pause (P)': '暂停 (P)', 'Sound (M)': '声音 (M)', 'Call your brother (T)': '叫兄弟来帮忙 (T)',
+    'Team-up special (T or Enter)': '兄弟合体大招 (T 或 回车)',
+
+    // banners and toasts
+    'PILLOW FIGHT!': '枕头大战！', 'STAGE CLEAR!': '过关啦！', 'BACK IN!': '回来啦！', 'BONK!': '咣！',
+    'SLAM DUNK!': '扣篮！', 'PEACE WAVE!': '比耶冲击波！',
+    '🪶 THE PILLOW BURST!': '🪶 枕头爆开啦！', '💨 BYE-BYE BAT!': '💨 球棒拜拜！', '💨 BYE-BYE CHICKEN!': '💨 橡皮鸡拜拜！',
+
+    // pause, continue, results
+    'P · Esc · Space to resume · Q for the menu · M sound': 'P · Esc · 空格 继续 · Q 回菜单 · M 声音',
+    'CONTINUE?': '继续吗？', 'YES! ▶': '继续！▶', '↻ TRY AGAIN': '↻ 再试一次', 'NO': '不了',
+    'No continues left, but you can try the stage again!': '没有续关次数了，不过可以重新挑战这一关！',
+    'Have another go! (as many as you like on easy)': '再来一次！（简单模式想来几次都行）',
+    'YOU WON!': '你们赢啦！',
+    'Every pillow is back home. The Grumble Gang waves the white flag! 🏳️': '所有枕头都回家啦。咕噜帮举白旗投降！🏳️',
+    '⭐ score': '⭐ 得分', '🏳️ baddies bonked': '🏳️ 打败的坏蛋', '⏱️ time': '⏱️ 用时', '🛡️ saves': '🛡️ 被救了几次',
+    '🤜🤛 team-ups': '🤜🤛 兄弟合体',
+    'NEXT STAGE ▶': '下一关 ▶', '🗺️ ALL STAGES': '🗺️ 全部关卡', '↻ AGAIN': '↻ 再来一次',
+    'Enter: next · R: again · Esc: menu': '回车：下一关 · R：再来 · Esc：菜单',
+
+    // the ? panel (js/keys.js)
+    'walk (up and down the street too)': '走路（还能往里往外走）',
+    'pillow bonk': '枕头打', 'special': '大招',
+    'double-tap A or D': '连按两下 A 或 D', 'double-tap ← or →': '连按两下 ← 或 →',
+    'call your brother · team-up': '叫兄弟来帮忙 · 兄弟合体', 'P or Esc · M': 'P 或 Esc · M',
+    'In 1 player both sets of keys work, and Space jumps.': '单人时两套按键都能用，空格也能跳。',
+    "Joystick, 👊 BONK, ⬆️ JUMP and ⭐. Tap your brother's face to call him.": '摇杆、👊 打、⬆️ 跳 和 ⭐ 大招。点兄弟的头像叫他来帮忙。',
+
+    // comic bursts (drawn on canvases)
+    'POW!': '砰！', 'BOP!': '啵！', 'BAM!': '嘭！', 'WHUMP!': '咚！', 'FLOMP!': '扑！', 'FWUMP!': '扑扑！', 'WHOOSH!': '嗖！',
+    'SQUAWK!': '嘎嘎！', 'WHAM!': '哐！', 'STRIKE!': '全倒！', 'BOING!': '嘣！', 'PEACE!': '耶！', 'KA-BOOM!': '轰隆！',
+    'OOF!': '哎哟！', 'THUD!': '咚隆！', 'HI!': '嗨！', 'WHEE!': '呜呼！', 'HIGH FIVE!': '击掌！', 'SAVED!': '挡住啦！',
+    'POOF!': '噗！', 'BEEP!': '哔！', 'BOINK!': '啵嘤！',
+
+    // street signs (drawn on canvases)
+    'PILLOW ST.': '枕头街站', 'PILLOW FUN!': '枕头真好玩！',
+    TOYS: '玩具', 'ICE CREAM': '冰淇淋', PETS: '宠物', CANDY: '糖果', GAMES: '游戏', SHOES: '鞋子', BOOKS: '图书', PIZZA: '披萨',
+    'GO TEDDY!': 'TEDDY 加油！', 'TEAM TOMMY': 'TOMMY 队', 'PILLOW CHAMPS': '枕头冠军', 'BOUNCE!': '弹起来！',
+    'HOME 99 · AWAY 0': '主队 99 · 客队 0',
+
+    // the gang (in case a name shows up)
+    'HOODIE ZOMBIE': '卫衣僵尸', 'BOLT BOT': '闪电机器人', 'WOBBLY GREMLIN': '摇摇小怪兽',
+  });
+
+  // strings with names or numbers in them
+  const t = (s) => L.t(s);
+  L.rule(/^STAGE (\d+)$/, '第 $1 关');
+  L.rule(/^(\d+) · (.+)$/, (m, n, name) => `${n} · ${t(name)}`);                                    // the stage chip
+  L.rule(/^(\S+) ([A-Z][A-Z .']+) · (.+)$/, (m, e, name, story) => `${e} ${t(name)} · ${t(story)}`); // under STAGE 1
+  L.rule(/^boss: (.+)$/, (m, b) => `大怪：${t(b)}`);
+  L.rule(/^(\S+) (.+) is pillow-fight free!$/, (m, e, name) => `${e} ${t(name)}的枕头都抢回来啦！`);
+  L.rule(/^(\S+) YUM! \+(\d+)$/, '$1 好吃！+$2');
+  L.rule(/^(\S+) (BIG PILLOW|RUBBER CHICKEN|FOAM BAT)!$/, (m, e, w) => `${e} ${WEAPON[w]}！`);
+  L.rule(/^(\S+) (ICE CREAM|WATER|JUICE BOX|COOKIE|WATERMELON|BANANA) FROM (.+)!$/, (m, e, item, who) => `${e} ${who} 送来的${TREAT[item]}！`);
+  L.rule(/^(.+) IS HERE! 👋$/, '$1 来啦！👋');
+  L.rule(/^(.+) SAVED YOU! 🛡️$/, '$1 救了你！🛡️');
+  L.rule(/^(.+) IS BACK! 💪$/, '$1 回来啦！💪');
+  L.rule(/^(.+) IS OUT!$/, '$1 出局啦！');
+  L.rule(/^BYE! (.+)$/, '拜拜！$1');
+  L.rule(/^(\d+) continues? left$/, '还能续关 $1 次');
+  L.rule(/^🍦 treats from (.+)$/, '🍦 $1 送的零食');
+})();
 
 </script>
 </body>
